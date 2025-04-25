@@ -1,47 +1,52 @@
-version: '3'
+version: '3.8'
 
 services:
-  wp:
-    image: wordpress:latest # https://hub.docker.com/_/wordpress/
+  proxy-manager:
+    image: jc21/nginx-proxy-manager
+    container_name: proxy-manager
     ports:
-      - 80:80 # change ip if required
+      - "80:80"
+      - "443:443"
+      - "8181:81"  # Admin-Oberfläche
     volumes:
-      - ./config/php.conf.ini:/usr/local/etc/php/conf.d/conf.ini
-      - ./wp-app:/var/www/html # Full wordpress project
-      #- ./plugin-name/trunk/:/var/www/html/wp-content/plugins/plugin-name # Plugin development
-      #- ./theme-name/trunk/:/var/www/html/wp-content/themes/theme-name # Theme development
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+    networks:
+      - proxy-network
+    restart: unless-stopped
+
+  wordpress:
+    image: wordpress:php8.3-apache
     environment:
       WORDPRESS_DB_HOST: db
-      WORDPRESS_DB_NAME: "${DB_NAME}"
-      WORDPRESS_DB_USER: root
-      WORDPRESS_DB_PASSWORD: "${DB_ROOT_PASSWORD}"
-    depends_on:
-      - db
-
-  wpcli:
-    image: wordpress:cli
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: secure_password
     volumes:
-      - ./config/php.conf.ini:/usr/local/etc/php/conf.d/conf.ini
-      - ./wp-app:/var/www/html
+      - wordpress_data:/var/www/html
+    networks:
+      - proxy-network
+      - internal-network
     depends_on:
       - db
-      - wp
 
   db:
-    image: mysql:latest # https://hub.docker.com/_/mysql/ - or mariadb https://hub.docker.com/_/mariadb
-    ports:
-      - ${IP}:3306:3306 # change ip if required
-    command: [
-        '--default_authentication_plugin=mysql_native_password',
-        '--character-set-server=utf8mb4',
-        '--collation-server=utf8mb4_unicode_ci'
-    ]
-    volumes:
-      - ./wp-data:/docker-entrypoint-initdb.d
-      - db_data:/var/lib/mysql
+    image: mysql:8.0
     environment:
-      MYSQL_DATABASE: "${DB_NAME}"
-      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
+      MYSQL_ROOT_PASSWORD: root_secret
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: secure_password
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - internal-network
 
 volumes:
+  wordpress_data:
   db_data:
+  data:
+  letsencrypt:
+
+networks:
+  proxy-network:
+  internal-network:
